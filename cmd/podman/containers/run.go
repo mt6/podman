@@ -25,7 +25,7 @@ var (
 	runDescription = "Runs a command in a new container from the given image"
 	runCommand     = &cobra.Command{
 		Args:  cobra.MinimumNArgs(1),
-		Use:   "run [flags] IMAGE [COMMAND [ARG...]]",
+		Use:   "run [options] IMAGE [COMMAND [ARG...]]",
 		Short: "Run a command in a new container",
 		Long:  runDescription,
 		RunE:  run,
@@ -66,7 +66,6 @@ func runFlags(flags *pflag.FlagSet) {
 
 	_ = flags.MarkHidden("signature-policy")
 	if registry.IsRemote() {
-		_ = flags.MarkHidden("authfile")
 		_ = flags.MarkHidden("http-proxy")
 		_ = flags.MarkHidden("preserve-fds")
 	}

@@ -7,9 +7,8 @@ import (
 	"text/tabwriter"
 	"text/template"
 
-	"github.com/containers/podman/v2/cmd/podman/parse"
+	"github.com/containers/common/pkg/report"
 	"github.com/containers/podman/v2/cmd/podman/registry"
-	"github.com/containers/podman/v2/cmd/podman/report"
 	"github.com/containers/podman/v2/pkg/domain/entities"
 	"github.com/spf13/cobra"
 )
@@ -17,7 +16,7 @@ import (
 var (
 	networkinspectDescription = `Inspect network`
 	networkinspectCommand     = &cobra.Command{
-		Use:     "inspect [flags] NETWORK [NETWORK...]",
+		Use:     "inspect [options] NETWORK [NETWORK...]",
 		Short:   "network inspect",
 		Long:    networkinspectDescription,
 		RunE:    networkInspect,
@@ -47,7 +46,7 @@ func networkInspect(_ *cobra.Command, args []string) error {
 	}
 
 	switch {
-	case parse.MatchesJSONFormat(networkInspectOptions.Format) || networkInspectOptions.Format == "":
+	case report.IsJSON(networkInspectOptions.Format) || networkInspectOptions.Format == "":
 		b, err := json.MarshalIndent(responses, "", "  ")
 		if err != nil {
 			return err

@@ -6,7 +6,7 @@ import (
 	"text/tabwriter"
 	"text/template"
 
-	"github.com/containers/podman/v2/cmd/podman/parse"
+	"github.com/containers/common/pkg/report"
 	"github.com/containers/podman/v2/cmd/podman/registry"
 	"github.com/containers/podman/v2/cmd/podman/utils"
 	"github.com/containers/podman/v2/cmd/podman/validate"
@@ -25,7 +25,7 @@ var (
 `
 
 	mountCommand = &cobra.Command{
-		Use:   "mount [flags] [CONTAINER...]",
+		Use:   "mount [options] [CONTAINER...]",
 		Short: "Mount a working container's root filesystem",
 		Long:  mountDescription,
 		RunE:  mount,
@@ -97,7 +97,7 @@ func mount(_ *cobra.Command, args []string) error {
 	}
 
 	switch {
-	case parse.MatchesJSONFormat(mountOpts.Format):
+	case report.IsJSON(mountOpts.Format):
 		return printJSON(reports)
 	case mountOpts.Format == "":
 		break // print defaults

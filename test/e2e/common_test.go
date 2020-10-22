@@ -235,14 +235,7 @@ func PodmanTestCreateUtil(tempDir string, remote bool) *PodmanTestIntegration {
 
 	ociRuntime := os.Getenv("OCI_RUNTIME")
 	if ociRuntime == "" {
-		var err error
-		ociRuntime, err = exec.LookPath("crun")
-		// If we cannot find the crun binary, setting to something static as we have no way
-		// to return an error.  The tests will fail and point out that the runc binary could
-		// not be found nicely.
-		if err != nil {
-			ociRuntime = "/usr/bin/runc"
-		}
+		ociRuntime = "crun"
 	}
 	os.Setenv("DISABLE_HC_SYSTEMD", "true")
 	CNIConfigDir := "/etc/cni/net.d"
@@ -672,4 +665,10 @@ func SkipIfContainerized(reason string) {
 func (p *PodmanTestIntegration) PodmanAsUser(args []string, uid, gid uint32, cwd string, env []string) *PodmanSessionIntegration {
 	podmanSession := p.PodmanAsUserBase(args, uid, gid, cwd, env, false, false, nil)
 	return &PodmanSessionIntegration{podmanSession}
+}
+
+// We don't support running Varlink when local
+func (p *PodmanTestIntegration) RestartRemoteService() {
+	p.StopRemoteService()
+	p.StartRemoteService()
 }

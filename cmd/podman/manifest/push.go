@@ -22,7 +22,7 @@ type manifestPushOptsWrapper struct {
 var (
 	manifestPushOpts = manifestPushOptsWrapper{}
 	pushCmd          = &cobra.Command{
-		Use:     "push [flags] SOURCE DESTINATION",
+		Use:     "push [options] SOURCE DESTINATION",
 		Short:   "Push a manifest list or image index to a registry",
 		Long:    "Pushes manifest lists and image indexes to registries.",
 		RunE:    push,
@@ -51,9 +51,7 @@ func init() {
 	flags.BoolVarP(&manifestPushOpts.Quiet, "quiet", "q", false, "don't output progress information when pushing lists")
 
 	if registry.IsRemote() {
-		_ = flags.MarkHidden("authfile")
 		_ = flags.MarkHidden("cert-dir")
-		_ = flags.MarkHidden("tls-verify")
 	}
 }
 

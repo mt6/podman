@@ -40,7 +40,7 @@ var (
 	// Command: podman _diff_ Object_ID
 	buildDescription = "Builds an OCI or Docker image using instructions from one or more Containerfiles and a specified build context directory."
 	buildCmd         = &cobra.Command{
-		Use:   "build [flags] [CONTEXT]",
+		Use:   "build [options] [CONTEXT]",
 		Short: "Build an image using instructions from Containerfiles",
 		Long:  buildDescription,
 		Args:  cobra.MaximumNArgs(1),
@@ -282,8 +282,7 @@ func buildFlagsWrapperToOptions(c *cobra.Command, contextDir string, flags *buil
 		flags.Layers = false
 	}
 
-	var stdin, stdout, stderr, reporter *os.File
-	stdin = os.Stdin
+	var stdout, stderr, reporter *os.File
 	stdout = os.Stdout
 	stderr = os.Stderr
 	reporter = os.Stderr
@@ -422,7 +421,6 @@ func buildFlagsWrapperToOptions(c *cobra.Command, contextDir string, flags *buil
 		ForceRmIntermediateCtrs: flags.ForceRm,
 		IDMappingOptions:        idmappingOptions,
 		IIDFile:                 flags.Iidfile,
-		In:                      stdin,
 		Isolation:               isolation,
 		Labels:                  flags.Label,
 		Layers:                  flags.Layers,

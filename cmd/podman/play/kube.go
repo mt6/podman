@@ -32,7 +32,7 @@ var (
   It creates the pod and containers described in the YAML.  The containers within the pod are then started and the ID of the new Pod is output.`
 
 	kubeCmd = &cobra.Command{
-		Use:   "kube [flags] KUBEFILE",
+		Use:   "kube [options] KUBEFILE",
 		Short: "Play a pod based on Kubernetes YAML.",
 		Long:  kubeDescription,
 		RunE:  kube,
@@ -54,10 +54,10 @@ func init() {
 	flags.StringVar(&kubeOptions.CredentialsCLI, "creds", "", "`Credentials` (USERNAME:PASSWORD) to use for authenticating to a registry")
 	flags.StringVar(&kubeOptions.Network, "network", "", "Connect pod to CNI network(s)")
 	flags.BoolVarP(&kubeOptions.Quiet, "quiet", "q", false, "Suppress output information when pulling images")
+	flags.BoolVar(&kubeOptions.TLSVerifyCLI, "tls-verify", true, "Require HTTPS and verify certificates when contacting registries")
+	flags.StringVar(&kubeOptions.Authfile, "authfile", auth.GetDefaultAuthFile(), "Path of the authentication file. Use REGISTRY_AUTH_FILE environment variable to override")
 	if !registry.IsRemote() {
-		flags.StringVar(&kubeOptions.Authfile, "authfile", auth.GetDefaultAuthFile(), "Path of the authentication file. Use REGISTRY_AUTH_FILE environment variable to override")
 		flags.StringVar(&kubeOptions.CertDir, "cert-dir", "", "`Pathname` of a directory containing TLS certificates and keys")
-		flags.BoolVar(&kubeOptions.TLSVerifyCLI, "tls-verify", true, "Require HTTPS and verify certificates when contacting registries")
 		flags.StringVar(&kubeOptions.SignaturePolicy, "signature-policy", "", "`Pathname` of signature policy file (not usually used)")
 		flags.StringVar(&kubeOptions.SeccompProfileRoot, "seccomp-profile-root", defaultSeccompRoot, "Directory path for seccomp profiles")
 		flags.StringSliceVar(&kubeOptions.ConfigMaps, "configmap", []string{}, "`Pathname` of a YAML file containing a kubernetes configmap")

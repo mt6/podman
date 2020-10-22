@@ -8,9 +8,8 @@ import (
 	"text/tabwriter"
 	"text/template"
 
-	"github.com/containers/podman/v2/cmd/podman/parse"
+	"github.com/containers/common/pkg/report"
 	"github.com/containers/podman/v2/cmd/podman/registry"
-	"github.com/containers/podman/v2/cmd/podman/report"
 	"github.com/containers/podman/v2/cmd/podman/validate"
 	"github.com/containers/podman/v2/pkg/domain/entities"
 	"github.com/pkg/errors"
@@ -24,7 +23,7 @@ podman volume ls
 List all available volumes. The output of the volumes can be filtered
 and the output format can be changed to JSON or a user specified Go template.`
 	lsCommand = &cobra.Command{
-		Use:     "ls",
+		Use:     "ls [options]",
 		Aliases: []string{"list"},
 		Args:    validate.NoArgs,
 		Short:   "List volumes",
@@ -75,7 +74,7 @@ func list(cmd *cobra.Command, args []string) error {
 	}
 
 	switch {
-	case parse.MatchesJSONFormat(cliOpts.Format):
+	case report.IsJSON(cliOpts.Format):
 		return outputJSON(responses)
 	case len(responses) < 1:
 		return nil

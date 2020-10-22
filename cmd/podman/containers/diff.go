@@ -1,9 +1,9 @@
 package containers
 
 import (
-	"github.com/containers/podman/v2/cmd/podman/parse"
+	"github.com/containers/common/pkg/report"
+	"github.com/containers/podman/v2/cmd/podman/common"
 	"github.com/containers/podman/v2/cmd/podman/registry"
-	"github.com/containers/podman/v2/cmd/podman/report"
 	"github.com/containers/podman/v2/cmd/podman/validate"
 	"github.com/containers/podman/v2/pkg/domain/entities"
 	"github.com/pkg/errors"
@@ -13,7 +13,7 @@ import (
 var (
 	// podman container _diff_
 	diffCmd = &cobra.Command{
-		Use:   "diff [flags] CONTAINER",
+		Use:   "diff [options] CONTAINER",
 		Args:  validate.IDOrLatestArgs,
 		Short: "Inspect changes to the container's file systems",
 		Long:  `Displays changes to the container filesystem's'.  The container will be compared to its parent layer.`,
@@ -54,10 +54,10 @@ func diff(cmd *cobra.Command, args []string) error {
 	}
 
 	switch {
-	case parse.MatchesJSONFormat(diffOpts.Format):
-		return report.ChangesToJSON(results)
+	case report.IsJSON(diffOpts.Format):
+		return common.ChangesToJSON(results)
 	case diffOpts.Format == "":
-		return report.ChangesToTable(results)
+		return common.ChangesToTable(results)
 	default:
 		return errors.New("only supported value for '--format' is 'json'")
 	}

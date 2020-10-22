@@ -17,6 +17,7 @@ import (
 	"github.com/containers/podman/v2/libpod/events"
 	"github.com/containers/podman/v2/libpod/image"
 	"github.com/containers/podman/v2/libpod/lock"
+	"github.com/containers/podman/v2/libpod/shutdown"
 	"github.com/containers/podman/v2/pkg/cgroups"
 	"github.com/containers/podman/v2/pkg/registries"
 	"github.com/containers/podman/v2/pkg/rootless"
@@ -174,9 +175,21 @@ func newRuntimeFromConfig(ctx context.Context, conf *config.Config, options ...R
 		}
 	}
 
+	if err := shutdown.Start(); err != nil {
+		return nil, errors.Wrapf(err, "error starting shutdown signal handler")
+	}
+
 	if err := makeRuntime(ctx, runtime); err != nil {
 		return nil, err
 	}
+
+	if err := shutdown.Register("libpod", func(sig os.Signal) error {
+		os.Exit(1)
+		return nil
+	}); err != nil {
+		logrus.Errorf("Error registering shutdown handler for libpod: %v", err)
+	}
+
 	return runtime, nil
 }
 
@@ -383,14 +396,12 @@ func makeRuntime(ctx context.Context, runtime *Runtime) (retErr error) {
 		// If the string starts with / it's a path to a runtime
 		// executable.
 		if strings.HasPrefix(runtime.config.Engine.OCIRuntime, "/") {
-			name := filepath.Base(runtime.config.Engine.OCIRuntime)
-
-			ociRuntime, err := newConmonOCIRuntime(name, []string{runtime.config.Engine.OCIRuntime}, runtime.conmonPath, runtime.runtimeFlags, runtime.config)
+			ociRuntime, err := newConmonOCIRuntime(runtime.config.Engine.OCIRuntime, []string{runtime.config.Engine.OCIRuntime}, runtime.conmonPath, runtime.runtimeFlags, runtime.config)
 			if err != nil {
 				return err
 			}
 
-			runtime.ociRuntimes[name] = ociRuntime
+			runtime.ociRuntimes[runtime.config.Engine.OCIRuntime] = ociRuntime
 			runtime.defaultOCIRuntime = ociRuntime
 		} else {
 			ociRuntime, ok := runtime.ociRuntimes[runtime.config.Engine.OCIRuntime]

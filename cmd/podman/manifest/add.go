@@ -25,7 +25,7 @@ type manifestAddOptsWrapper struct {
 var (
 	manifestAddOpts = manifestAddOptsWrapper{}
 	addCmd          = &cobra.Command{
-		Use:   "add [flags] LIST LIST",
+		Use:   "add [options] LIST LIST",
 		Short: "Add images to a manifest list or image index",
 		Long:  "Adds an image to a manifest list or image index.",
 		RunE:  add,
@@ -56,9 +56,7 @@ func init() {
 	flags.StringVar(&manifestAddOpts.Variant, "variant", "", "override the `Variant` of the specified image")
 
 	if registry.IsRemote() {
-		_ = flags.MarkHidden("authfile")
 		_ = flags.MarkHidden("cert-dir")
-		_ = flags.MarkHidden("tls-verify")
 	}
 }
 

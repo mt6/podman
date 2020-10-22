@@ -1,9 +1,9 @@
 package images
 
 import (
-	"github.com/containers/podman/v2/cmd/podman/parse"
+	"github.com/containers/common/pkg/report"
+	"github.com/containers/podman/v2/cmd/podman/common"
 	"github.com/containers/podman/v2/cmd/podman/registry"
-	"github.com/containers/podman/v2/cmd/podman/report"
 	"github.com/containers/podman/v2/pkg/domain/entities"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -13,7 +13,7 @@ import (
 var (
 	// podman container _inspect_
 	diffCmd = &cobra.Command{
-		Use:   "diff [flags] IMAGE",
+		Use:   "diff [options] IMAGE",
 		Args:  cobra.ExactArgs(1),
 		Short: "Inspect changes to the image's file systems",
 		Long:  `Displays changes to the image's filesystem.  The image will be compared to its parent layer.`,
@@ -51,10 +51,10 @@ func diff(cmd *cobra.Command, args []string) error {
 	}
 
 	switch {
-	case parse.MatchesJSONFormat(diffOpts.Format):
-		return report.ChangesToJSON(results)
+	case report.IsJSON(diffOpts.Format):
+		return common.ChangesToJSON(results)
 	case diffOpts.Format == "":
-		return report.ChangesToTable(results)
+		return common.ChangesToTable(results)
 	default:
 		return errors.New("only supported value for '--format' is 'json'")
 	}

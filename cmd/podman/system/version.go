@@ -8,9 +8,8 @@ import (
 	"text/tabwriter"
 	"text/template"
 
-	"github.com/containers/podman/v2/cmd/podman/parse"
+	"github.com/containers/common/pkg/report"
 	"github.com/containers/podman/v2/cmd/podman/registry"
-	"github.com/containers/podman/v2/cmd/podman/report"
 	"github.com/containers/podman/v2/cmd/podman/validate"
 	"github.com/containers/podman/v2/libpod/define"
 	"github.com/containers/podman/v2/pkg/domain/entities"
@@ -19,7 +18,7 @@ import (
 
 var (
 	versionCommand = &cobra.Command{
-		Use:   "version",
+		Use:   "version [options]",
 		Args:  validate.NoArgs,
 		Short: "Display the Podman Version Information",
 		RunE:  version,
@@ -42,7 +41,7 @@ func version(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if parse.MatchesJSONFormat(versionFormat) {
+	if report.IsJSON(versionFormat) {
 		s, err := json.MarshalToString(versions)
 		if err != nil {
 			return err

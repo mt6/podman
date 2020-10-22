@@ -254,9 +254,11 @@ func (r *Runtime) setupSlirp4netns(ctr *Container) error {
 	if ctr.config.NetworkOptions != nil {
 		slirpOptions := ctr.config.NetworkOptions["slirp4netns"]
 		for _, o := range slirpOptions {
-			parts := strings.Split(o, "=")
+			parts := strings.SplitN(o, "=", 2)
+			if len(parts) < 2 {
+				return errors.Errorf("unknown option for slirp4netns: %q", o)
+			}
 			option, value := parts[0], parts[1]
-
 			switch option {
 			case "cidr":
 				ipv4, _, err := net.ParseCIDR(value)
@@ -823,6 +825,20 @@ func getContainerNetIO(ctr *Container) (*netlink.LinkStatistics, error) {
 // Produce an InspectNetworkSettings containing information on the container
 // network.
 func (c *Container) getContainerNetworkInfo() (*define.InspectNetworkSettings, error) {
+	if c.config.NetNsCtr != "" {
+		netNsCtr, err := c.runtime.GetContainer(c.config.NetNsCtr)
+		if err != nil {
+			return nil, err
+		}
+		// Have to sync to ensure that state is populated
+		if err := netNsCtr.syncContainer(); err != nil {
+			return nil, err
+		}
+		logrus.Debugf("Container %s shares network namespace, retrieving network info of container %s", c.ID(), c.config.NetNsCtr)
+
+		return netNsCtr.getContainerNetworkInfo()
+	}
+
 	settings := new(define.InspectNetworkSettings)
 	settings.Ports = makeInspectPortBindings(c.config.PortMappings)
 

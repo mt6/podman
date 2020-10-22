@@ -30,7 +30,7 @@ var (
 
 	// Command: podman pull
 	pullCmd = &cobra.Command{
-		Use:   "pull [flags] IMAGE",
+		Use:   "pull [options] IMAGE",
 		Args:  cobra.ExactArgs(1),
 		Short: "Pull an image from a registry",
 		Long:  pullDescription,
@@ -84,11 +84,11 @@ func pullFlags(flags *pflag.FlagSet) {
 	flags.Bool("disable-content-trust", false, "This is a Docker specific option and is a NOOP")
 	flags.BoolVarP(&pullOptions.Quiet, "quiet", "q", false, "Suppress output information when pulling images")
 	flags.StringVar(&pullOptions.SignaturePolicy, "signature-policy", "", "`Pathname` of signature policy file (not usually used)")
+	flags.BoolVar(&pullOptions.TLSVerifyCLI, "tls-verify", true, "Require HTTPS and verify certificates when contacting registries")
+	flags.StringVar(&pullOptions.Authfile, "authfile", auth.GetDefaultAuthFile(), "Path of the authentication file. Use REGISTRY_AUTH_FILE environment variable to override")
 
 	if !registry.IsRemote() {
-		flags.StringVar(&pullOptions.Authfile, "authfile", auth.GetDefaultAuthFile(), "Path of the authentication file. Use REGISTRY_AUTH_FILE environment variable to override")
 		flags.StringVar(&pullOptions.CertDir, "cert-dir", "", "`Pathname` of a directory containing TLS certificates and keys")
-		flags.BoolVar(&pullOptions.TLSVerifyCLI, "tls-verify", true, "Require HTTPS and verify certificates when contacting registries")
 	}
 	_ = flags.MarkHidden("signature-policy")
 }

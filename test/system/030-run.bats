@@ -460,24 +460,36 @@ json-file | f
     is "$output" "$expect" "podman run with --tz=local, matches host"
 }
 
-@test "podman container exists" {
-    rand=$(random_string 30)
-    run_podman 1 container exists myctr
-
-    run_podman create --name myctr $IMAGE /bin/true
-    run_podman container exists myctr
-
-    # Create a container that podman does not know about
-    run buildah from $IMAGE
+# run with --runtime should preserve the named runtime
+@test "podman run : full path to --runtime is preserved" {
+    skip_if_cgroupsv1
+    skip_if_remote
+    run_podman run -d --runtime '/usr/bin/crun' $IMAGE sleep 60
     cid="$output"
 
-    # exists should fail
-    run_podman 1 container exists $cid
+    run_podman inspect --format '{{.OCIRuntime}}' $cid
+    is "$output" "/usr/bin/crun"
 
-    # exists should succeed
-    run_podman container exists --external $cid
+    run_podman kill $cid
+}
 
-    run buildah rm $cid
+# Regression test for issue #8082
+@test "podman run : look up correct image name" {
+	# Create a 2nd tag for the local image.
+	local name="localhost/foo/bar"
+	run_podman tag $IMAGE $name
+
+	# Create a container with the 2nd tag and make sure that it's being
+	# used.  #8082 always inaccurately used the 1st tag.
+	run_podman create $name
+	cid="$output"
+
+	run_podman inspect --format "{{.ImageName}}" $cid
+	is "$output" "$name"
+
+	# Clean up.
+	run_podman rm $cid
+	run_podman untag $IMAGE $name
 }
 
 # vim: filetype=sh

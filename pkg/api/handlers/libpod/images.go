@@ -206,7 +206,7 @@ func ExportImage(w http.ResponseWriter, r *http.Request) {
 		utils.Error(w, "unknown format", http.StatusInternalServerError, errors.Errorf("unknown format %q", query.Format))
 		return
 	}
-	if err := newImage.Save(r.Context(), name, query.Format, output, []string{}, false, query.Compress); err != nil {
+	if err := newImage.Save(r.Context(), name, query.Format, output, []string{}, false, query.Compress, true); err != nil {
 		utils.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest, err)
 		return
 	}
@@ -284,6 +284,7 @@ func ExportImages(w http.ResponseWriter, r *http.Request) {
 		Format:            query.Format,
 		MultiImageArchive: true,
 		Output:            output,
+		RemoveSignatures:  true,
 	}
 
 	imageEngine := abi.ImageEngine{Libpod: runtime}
@@ -635,6 +636,14 @@ func SearchImages(w http.ResponseWriter, r *http.Request) {
 		}
 		options.Filter = *filter
 	}
+
+	_, authfile, key, err := auth.GetCredentials(r)
+	if err != nil {
+		utils.Error(w, "failed to retrieve repository credentials", http.StatusBadRequest, errors.Wrapf(err, "failed to parse %q header for %s", key, r.URL.String()))
+		return
+	}
+	defer auth.RemoveAuthfile(authfile)
+	options.Authfile = authfile
 
 	searchResults, err := image.SearchImages(query.Term, options)
 	if err != nil {

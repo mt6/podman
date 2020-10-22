@@ -34,6 +34,14 @@ function basic_setup() {
     # Clean up all containers
     run_podman rm --all --force
 
+    # ...including external (buildah) ones
+    run_podman ps --all --external --format '{{.ID}} {{.Names}}'
+    for line in "${lines[@]}"; do
+        set $line
+        echo "# setup(): removing stray external container $1 ($2)" >&3
+        run_podman rm $1
+    done
+
     # Clean up all images except those desired
     found_needed_image=
     run_podman images --all --format '{{.Repository}}:{{.Tag}} {{.ID}}'
@@ -245,6 +253,7 @@ function is_cgroupsv1() {
     ! is_cgroupsv2
 }
 
+# True if cgroups v2 are enabled
 function is_cgroupsv2() {
     cgroup_type=$(stat -f -c %T /sys/fs/cgroup)
     test "$cgroup_type" = "cgroup2fs"
@@ -294,6 +303,15 @@ function skip_if_no_selinux() {
         skip "selinux not available"
     elif ! /usr/sbin/selinuxenabled; then
         skip "selinux disabled"
+    fi
+}
+
+#######################
+#  skip_if_cgroupsv1  #  ...with an optional message
+#######################
+function skip_if_cgroupsv1() {
+    if ! is_cgroupsv2; then
+        skip "${1:-test requires cgroupsv2}"
     fi
 }
 

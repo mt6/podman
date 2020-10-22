@@ -7,9 +7,8 @@ import (
 	"text/template"
 
 	tm "github.com/buger/goterm"
-	"github.com/containers/podman/v2/cmd/podman/parse"
+	"github.com/containers/common/pkg/report"
 	"github.com/containers/podman/v2/cmd/podman/registry"
-	"github.com/containers/podman/v2/cmd/podman/report"
 	"github.com/containers/podman/v2/cmd/podman/validate"
 	"github.com/containers/podman/v2/libpod/define"
 	"github.com/containers/podman/v2/pkg/cgroups"
@@ -26,7 +25,7 @@ import (
 var (
 	statsDescription = "Display percentage of CPU, memory, network I/O, block I/O and PIDs for one or more containers."
 	statsCommand     = &cobra.Command{
-		Use:   "stats [flags] [CONTAINER...]",
+		Use:   "stats [options] [CONTAINER...]",
 		Short: "Display a live stream of container resource usage statistics",
 		Long:  statsDescription,
 		RunE:  stats,
@@ -157,7 +156,7 @@ func outputStats(reports []define.ContainerStats) error {
 	for _, r := range reports {
 		stats = append(stats, containerStats{r})
 	}
-	if parse.MatchesJSONFormat(statsOptions.Format) {
+	if report.IsJSON(statsOptions.Format) {
 		return outputJSON(stats)
 	}
 	format := defaultStatsRow
@@ -240,9 +239,9 @@ func combineHumanValues(a, b uint64) string {
 
 func outputJSON(stats []containerStats) error {
 	type jstat struct {
-		Id         string `json:"id"` //nolint
+		Id         string `json:"id"` // nolint
 		Name       string `json:"name"`
-		CpuPercent string `json:"cpu_percent"` //nolint
+		CpuPercent string `json:"cpu_percent"` // nolint
 		MemUsage   string `json:"mem_usage"`
 		MemPerc    string `json:"mem_percent"`
 		NetIO      string `json:"net_io"`

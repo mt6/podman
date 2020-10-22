@@ -6,9 +6,9 @@ import (
 	"text/template"
 
 	"github.com/containers/common/pkg/auth"
+	"github.com/containers/common/pkg/report"
 	"github.com/containers/image/v5/types"
 	"github.com/containers/podman/v2/cmd/podman/registry"
-	"github.com/containers/podman/v2/cmd/podman/report"
 	"github.com/containers/podman/v2/pkg/domain/entities"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -32,7 +32,7 @@ var (
 
 	// Command: podman search
 	searchCmd = &cobra.Command{
-		Use:   "search [flags] TERM",
+		Use:   "search [options] TERM",
 		Short: "Search registry for image",
 		Long:  searchDescription,
 		RunE:  imageSearch,

@@ -29,7 +29,7 @@ var (
 
 	// Command: podman push
 	pushCmd = &cobra.Command{
-		Use:   "push [flags] SOURCE [DESTINATION]",
+		Use:   "push [options] SOURCE [DESTINATION]",
 		Short: "Push an image to a specified destination",
 		Long:  pushDescription,
 		RunE:  imagePush,
@@ -88,11 +88,9 @@ func pushFlags(flags *pflag.FlagSet) {
 	flags.BoolVar(&pushOptions.TLSVerifyCLI, "tls-verify", true, "Require HTTPS and verify certificates when contacting registries")
 
 	if registry.IsRemote() {
-		_ = flags.MarkHidden("authfile")
 		_ = flags.MarkHidden("cert-dir")
 		_ = flags.MarkHidden("compress")
 		_ = flags.MarkHidden("quiet")
-		_ = flags.MarkHidden("tls-verify")
 	}
 	_ = flags.MarkHidden("signature-policy")
 }

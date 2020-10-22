@@ -5,7 +5,7 @@ import (
 	"os"
 	"text/template"
 
-	"github.com/containers/podman/v2/cmd/podman/parse"
+	"github.com/containers/common/pkg/report"
 	"github.com/containers/podman/v2/cmd/podman/registry"
 	"github.com/containers/podman/v2/cmd/podman/validate"
 	"github.com/containers/podman/v2/pkg/domain/entities"
@@ -20,7 +20,7 @@ var (
   Useful for the user and when reporting issues.
 `
 	infoCommand = &cobra.Command{
-		Use:     "info",
+		Use:     "info [options]",
 		Args:    validate.NoArgs,
 		Long:    infoDescription,
 		Short:   "Display podman system information",
@@ -70,7 +70,7 @@ func info(cmd *cobra.Command, args []string) error {
 	}
 
 	switch {
-	case parse.MatchesJSONFormat(inFormat):
+	case report.IsJSON(inFormat):
 		b, err := json.MarshalIndent(info, "", "  ")
 		if err != nil {
 			return err
