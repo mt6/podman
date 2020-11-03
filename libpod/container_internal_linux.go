@@ -39,6 +39,7 @@ import (
 	"github.com/containers/storage/pkg/idtools"
 	securejoin "github.com/cyphar/filepath-securejoin"
 	runcuser "github.com/opencontainers/runc/libcontainer/user"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	spec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/opencontainers/runtime-tools/generate"
 	"github.com/opencontainers/selinux/go-selinux/label"
@@ -308,7 +309,7 @@ func (c *Container) generateSpec(ctx context.Context) (*spec.Spec, error) {
 				fallthrough
 			case "Z":
 				if err := label.Relabel(m.Source, c.MountLabel(), label.IsShared(o)); err != nil {
-					return nil, errors.Wrapf(err, "relabel failed %q", m.Source)
+					return nil, err
 				}
 
 			default:
@@ -343,7 +344,7 @@ func (c *Container) generateSpec(ctx context.Context) (*spec.Spec, error) {
 			Type:        "bind",
 			Source:      srcPath,
 			Destination: dstPath,
-			Options:     []string{"bind", "private"},
+			Options:     []string{"bind", "rprivate"},
 		}
 		if c.IsReadOnly() && dstPath != "/dev/shm" {
 			newMount.Options = append(newMount.Options, "ro", "nosuid", "noexec", "nodev")
@@ -359,11 +360,40 @@ func (c *Container) generateSpec(ctx context.Context) (*spec.Spec, error) {
 	for _, overlayVol := range c.config.OverlayVolumes {
 		contentDir, err := overlay.TempDir(c.config.StaticDir, c.RootUID(), c.RootGID())
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to create TempDir in the %s directory", c.config.StaticDir)
+			return nil, err
 		}
 		overlayMount, err := overlay.Mount(contentDir, overlayVol.Source, overlayVol.Dest, c.RootUID(), c.RootGID(), c.runtime.store.GraphOptions())
 		if err != nil {
-			return nil, errors.Wrapf(err, "creating overlay failed %q", overlayVol.Source)
+			return nil, errors.Wrapf(err, "mounting overlay failed %q", overlayVol.Source)
+		}
+		g.AddMount(overlayMount)
+	}
+
+	// Add image volumes as overlay mounts
+	for _, volume := range c.config.ImageVolumes {
+		// Mount the specified image.
+		img, err := c.runtime.ImageRuntime().NewFromLocal(volume.Source)
+		if err != nil {
+			return nil, errors.Wrapf(err, "error creating image volume %q:%q", volume.Source, volume.Dest)
+		}
+		mountPoint, err := img.Mount(nil, "")
+		if err != nil {
+			return nil, errors.Wrapf(err, "error mounting image volume %q:%q", volume.Source, volume.Dest)
+		}
+
+		contentDir, err := overlay.TempDir(c.config.StaticDir, c.RootUID(), c.RootGID())
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to create TempDir in the %s directory", c.config.StaticDir)
+		}
+
+		var overlayMount specs.Mount
+		if volume.ReadWrite {
+			overlayMount, err = overlay.Mount(contentDir, mountPoint, volume.Dest, c.RootUID(), c.RootGID(), c.runtime.store.GraphOptions())
+		} else {
+			overlayMount, err = overlay.MountReadOnly(contentDir, mountPoint, volume.Dest, c.RootUID(), c.RootGID(), c.runtime.store.GraphOptions())
+		}
+		if err != nil {
+			return nil, errors.Wrapf(err, "creating overlay mount for image %q failed", volume.Source)
 		}
 		g.AddMount(overlayMount)
 	}
@@ -668,11 +698,31 @@ func (c *Container) setupSystemd(mounts []spec.Mount, g generate.Generator) erro
 		}
 		g.AddMount(systemdMnt)
 	} else {
+		mountOptions := []string{"bind", "rprivate"}
+
+		var statfs unix.Statfs_t
+		if err := unix.Statfs("/sys/fs/cgroup/systemd", &statfs); err != nil {
+			mountOptions = append(mountOptions, "nodev", "noexec", "nosuid")
+		} else {
+			if statfs.Flags&unix.MS_NODEV == unix.MS_NODEV {
+				mountOptions = append(mountOptions, "nodev")
+			}
+			if statfs.Flags&unix.MS_NOEXEC == unix.MS_NOEXEC {
+				mountOptions = append(mountOptions, "noexec")
+			}
+			if statfs.Flags&unix.MS_NOSUID == unix.MS_NOSUID {
+				mountOptions = append(mountOptions, "nosuid")
+			}
+			if statfs.Flags&unix.MS_RDONLY == unix.MS_RDONLY {
+				mountOptions = append(mountOptions, "ro")
+			}
+		}
+
 		systemdMnt := spec.Mount{
 			Destination: "/sys/fs/cgroup/systemd",
 			Type:        "bind",
 			Source:      "/sys/fs/cgroup/systemd",
-			Options:     []string{"bind", "nodev", "noexec", "nosuid", "rprivate"},
+			Options:     mountOptions,
 		}
 		g.AddMount(systemdMnt)
 		g.AddLinuxMaskedPaths("/sys/fs/cgroup/systemd/release_agent")
@@ -781,7 +831,7 @@ func (c *Container) exportCheckpoint(dest string, ignoreRootfs bool) error {
 				return errors.Wrapf(err, "error creating delete files list file %q", deleteFilesList)
 			}
 			if err := ioutil.WriteFile(deleteFilesList, formatJSON, 0600); err != nil {
-				return errors.Wrapf(err, "error creating delete files list file %q", deleteFilesList)
+				return errors.Wrap(err, "error creating delete files list file")
 			}
 
 			includeFiles = append(includeFiles, "deleted.files")
@@ -805,7 +855,7 @@ func (c *Container) exportCheckpoint(dest string, ignoreRootfs bool) error {
 	defer outFile.Close()
 
 	if err := os.Chmod(dest, 0600); err != nil {
-		return errors.Wrapf(err, "cannot chmod %q", dest)
+		return err
 	}
 
 	_, err = io.Copy(outFile, input)
@@ -1029,7 +1079,7 @@ func (c *Container) restore(ctx context.Context, options ContainerCheckpointOpti
 					if n.Sandbox != "" {
 						MAC, err = net.ParseMAC(n.Mac)
 						if err != nil {
-							return errors.Wrapf(err, "failed to parse MAC %v", n.Mac)
+							return err
 						}
 						break
 					}
@@ -1133,14 +1183,14 @@ func (c *Container) restore(ctx context.Context, options ContainerCheckpointOpti
 				return errors.Wrapf(err, "failed to read deleted files file")
 			}
 			if err := json.Unmarshal(deletedFilesJSON, &deletedFiles); err != nil {
-				return errors.Wrapf(err, "failed to read deleted files file %s", deletedFilesPath)
+				return errors.Wrapf(err, "failed to unmarshal deleted files file %s", deletedFilesPath)
 			}
 			for _, deleteFile := range deletedFiles {
 				// Using RemoveAll as deletedFiles, which is generated from 'podman diff'
 				// lists completely deleted directories as a single entry: 'D /root'.
 				err = os.RemoveAll(filepath.Join(c.state.Mountpoint, deleteFile))
 				if err != nil {
-					return errors.Wrapf(err, "failed to delete file %s from container %s during restore", deletedFilesPath, c.ID())
+					return errors.Wrapf(err, "failed to delete files from container %s during restore", c.ID())
 				}
 			}
 		}
@@ -1179,7 +1229,7 @@ func (c *Container) restore(ctx context.Context, options ContainerCheckpointOpti
 // Make standard bind mounts to include in the container
 func (c *Container) makeBindMounts() error {
 	if err := os.Chown(c.state.RunDir, c.RootUID(), c.RootGID()); err != nil {
-		return errors.Wrapf(err, "cannot chown run directory %s", c.state.RunDir)
+		return errors.Wrap(err, "cannot chown run directory")
 	}
 
 	if c.state.BindMounts == nil {
@@ -1197,13 +1247,13 @@ func (c *Container) makeBindMounts() error {
 		if c.config.NetNsCtr == "" {
 			if resolvePath, ok := c.state.BindMounts["/etc/resolv.conf"]; ok {
 				if err := os.Remove(resolvePath); err != nil && !os.IsNotExist(err) {
-					return errors.Wrapf(err, "error removing container %s resolv.conf", c.ID())
+					return errors.Wrapf(err, "container %s", c.ID())
 				}
 				delete(c.state.BindMounts, "/etc/resolv.conf")
 			}
 			if hostsPath, ok := c.state.BindMounts["/etc/hosts"]; ok {
 				if err := os.Remove(hostsPath); err != nil && !os.IsNotExist(err) {
-					return errors.Wrapf(err, "error removing container %s hosts", c.ID())
+					return errors.Wrapf(err, "container %s", c.ID())
 				}
 				delete(c.state.BindMounts, "/etc/hosts")
 			}
@@ -1403,7 +1453,7 @@ func (c *Container) generateResolvConf() (string, error) {
 				if err == nil {
 					resolvConf = definedPath
 				} else if !os.IsNotExist(err) {
-					return "", errors.Wrapf(err, "failed to stat %s", definedPath)
+					return "", err
 				}
 			}
 			break
@@ -1412,7 +1462,8 @@ func (c *Container) generateResolvConf() (string, error) {
 
 	// Determine the endpoint for resolv.conf in case it is a symlink
 	resolvPath, err := filepath.EvalSymlinks(resolvConf)
-	if err != nil {
+	// resolv.conf doesn't have to exists
+	if err != nil && !os.IsNotExist(err) {
 		return "", err
 	}
 
@@ -1422,8 +1473,9 @@ func (c *Container) generateResolvConf() (string, error) {
 	}
 
 	contents, err := ioutil.ReadFile(resolvPath)
-	if err != nil {
-		return "", errors.Wrapf(err, "unable to read %s", resolvPath)
+	// resolv.conf doesn't have to exists
+	if err != nil && !os.IsNotExist(err) {
+		return "", err
 	}
 
 	// Ensure that the container's /etc/resolv.conf is compatible with its
@@ -1492,7 +1544,7 @@ func (c *Container) generateResolvConf() (string, error) {
 	destPath := filepath.Join(c.state.RunDir, "resolv.conf")
 
 	if err := os.Remove(destPath); err != nil && !os.IsNotExist(err) {
-		return "", errors.Wrapf(err, "error removing resolv.conf for container %s", c.ID())
+		return "", errors.Wrapf(err, "container %s", c.ID())
 	}
 
 	// Build resolv.conf
@@ -1512,7 +1564,7 @@ func (c *Container) generateResolvConf() (string, error) {
 func (c *Container) generateHosts(path string) (string, error) {
 	orig, err := ioutil.ReadFile(path)
 	if err != nil {
-		return "", errors.Wrapf(err, "unable to read %s", path)
+		return "", err
 	}
 	hosts := string(orig)
 	hosts += c.getHosts()
@@ -1915,7 +1967,7 @@ func (c *Container) generatePasswdAndGroup() (string, string, error) {
 			}
 			orig, err := ioutil.ReadFile(originPasswdFile)
 			if err != nil && !os.IsNotExist(err) {
-				return "", "", errors.Wrapf(err, "unable to read passwd file %s", originPasswdFile)
+				return "", "", err
 			}
 			passwdFile, err := c.writeStringToStaticDir("passwd", string(orig)+passwdEntry)
 			if err != nil {
@@ -1934,7 +1986,7 @@ func (c *Container) generatePasswdAndGroup() (string, string, error) {
 
 			f, err := os.OpenFile(containerPasswd, os.O_APPEND|os.O_WRONLY, 0600)
 			if err != nil {
-				return "", "", errors.Wrapf(err, "error opening container %s /etc/passwd", c.ID())
+				return "", "", errors.Wrapf(err, "container %s", c.ID())
 			}
 			defer f.Close()
 
@@ -1961,7 +2013,7 @@ func (c *Container) generatePasswdAndGroup() (string, string, error) {
 			}
 			orig, err := ioutil.ReadFile(originGroupFile)
 			if err != nil && !os.IsNotExist(err) {
-				return "", "", errors.Wrapf(err, "unable to read group file %s", originGroupFile)
+				return "", "", err
 			}
 			groupFile, err := c.writeStringToStaticDir("group", string(orig)+groupEntry)
 			if err != nil {
@@ -1980,7 +2032,7 @@ func (c *Container) generatePasswdAndGroup() (string, string, error) {
 
 			f, err := os.OpenFile(containerGroup, os.O_APPEND|os.O_WRONLY, 0600)
 			if err != nil {
-				return "", "", errors.Wrapf(err, "error opening container %s /etc/group", c.ID())
+				return "", "", errors.Wrapf(err, "container %s", c.ID())
 			}
 			defer f.Close()
 
@@ -2001,13 +2053,13 @@ func (c *Container) copyOwnerAndPerms(source, dest string) error {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return errors.Wrapf(err, "cannot stat `%s`", dest)
+		return err
 	}
 	if err := os.Chmod(dest, info.Mode()); err != nil {
-		return errors.Wrapf(err, "cannot chmod `%s`", dest)
+		return err
 	}
 	if err := os.Chown(dest, int(info.Sys().(*syscall.Stat_t).Uid), int(info.Sys().(*syscall.Stat_t).Gid)); err != nil {
-		return errors.Wrapf(err, "cannot chown `%s`", dest)
+		return err
 	}
 	return nil
 }
@@ -2098,7 +2150,7 @@ func (c *Container) checkFileExistsInRootfs(file string) (bool, error) {
 		if os.IsNotExist(err) {
 			return false, nil
 		}
-		return false, errors.Wrapf(err, "error accessing container %s file %q", c.ID(), file)
+		return false, errors.Wrapf(err, "container %s", c.ID())
 	}
 	if stat.IsDir() {
 		return false, nil

@@ -118,15 +118,27 @@ Write the pid of the **conmon** process to a file. As **conmon** runs in a separ
 
 **--cpu-period**=*limit*
 
-Limit the container's CPU usage by setting CPU CFS (Completely Fair Scheduler) period.
+Set the CPU period for the Completely Fair Scheduler (CFS), which is a
+duration in microseconds. Once the container's CPU quota is used up, it will
+not be scheduled to run until the current period ends. Defaults to 100000
+microseconds.
+
+On some systems, changing the CPU limits may not be allowed for non-root
+users. For more details, see
+https://github.com/containers/podman/blob/master/troubleshooting.md#26-running-containers-with-cpu-limits-fails-with-a-permissions-error
 
 **--cpu-quota**=*limit*
 
-Limit the CPU CFS (Completely Fair Scheduler) quota.
+Limit the CPU Completely Fair Scheduler (CFS) quota.
 
 Limit the container's CPU usage. By default, containers run with the full
-CPU resource. This flag tell the kernel to restrict the container's CPU usage
-to the quota you specify.
+CPU resource. The limit is a number in microseconds. If you provide a number,
+the container will be allowed to use that much CPU time until the CPU period
+ends (controllable via **--cpu-period**).
+
+On some systems, changing the CPU limits may not be allowed for non-root
+users. For more details, see
+https://github.com/containers/podman/blob/master/troubleshooting.md#26-running-containers-with-cpu-limits-fails-with-a-permissions-error
 
 **--cpu-rt-period**=*microseconds*
 
@@ -180,7 +192,13 @@ division of CPU shares:
 
 **--cpus**=*number*
 
-Number of CPUs. The default is *0.0* which means no limit.
+Number of CPUs. The default is *0.0* which means no limit. This is shorthand
+for **--cpu-period** and **--cpu-quota**, so you may only set either
+**--cpus** or **--cpu-period** and **--cpu-quota**.
+
+On some systems, changing the CPU limits may not be allowed for non-root
+users. For more details, see
+https://github.com/containers/podman/blob/master/troubleshooting.md#26-running-containers-with-cpu-limits-fails-with-a-permissions-error
 
 **--cpuset-cpus**=*number*
 
@@ -197,20 +215,20 @@ to only use memory from the first two memory nodes.
 
 **--detach**, **-d**=**true**|**false**
 
-Detached mode: run the container in the background and print the new container ID. The default is **false**.
+Detached mode: run the container in the background and print the new container ID. The default is *false*.
 
 At any time you can run **podman ps** in
 the other shell to view a list of the running containers. You can reattach to a
 detached container with **podman attach**.
 
 When attached in the tty mode, you can detach from the container (and leave it
-running) using a configurable key sequence.
+running) using a configurable key sequence. The default sequence is `ctrl-p,ctrl-q`.
+Configure the keys sequence using the **--detach-keys** option, or specifying
+it in the **containers.conf** file: see **containers.conf(5)** for more information.
 
-**--detach-keys**=_sequence_
+**--detach-keys**=*sequence*
 
-Specify the key sequence for detaching a container; _sequence_ is a comma-delimited set
-in which each item can be a single character from the [a-Z] range,
-or **ctrl**-_value_, where _value_ is one of: **a-z** or **@^[,_**.
+Specify the key sequence for detaching a container. Format is a single character `[a-Z]` or one or more `ctrl-<value>` characters where `<value>` is one of: `a-z`, `@`, `^`, `[`, `,` or `_`. Specifying "" will disable this feature. The default is *ctrl-p,ctrl-q*.
 
 This option can also be set in **containers.conf**(5) file.
 
@@ -515,7 +533,7 @@ Tune a container's memory swappiness behavior. Accepts an integer between *0* an
 
 Attach a filesystem mount to the container
 
-Current supported mount TYPEs are **bind**, **volume**, **tmpfs** and **devpts**. <sup>[[1]](#Footnote1)</sup>
+Current supported mount TYPEs are **bind**, **volume**, **image**, **tmpfs** and **devpts**. <sup>[[1]](#Footnote1)</sup>
 
        e.g.
 
@@ -527,6 +545,8 @@ Current supported mount TYPEs are **bind**, **volume**, **tmpfs** and **devpts**
 
        type=tmpfs,tmpfs-size=512M,destination=/path/in/container
 
+       type=image,source=fedora,destination=/fedora-image,rw=true
+
        type=devpts,destination=/dev/pts
 
        Common Options:
@@ -535,17 +555,27 @@ Current supported mount TYPEs are **bind**, **volume**, **tmpfs** and **devpts**
 
 	      · dst, destination, target: mount destination spec.
 
+       Options specific to volume:
+
 	      · ro, readonly: true or false (default).
+
+       Options specific to image:
+
+	      · rw, readwrite: true or false (default).
 
        Options specific to bind:
 
-	      · bind-propagation: shared, slave, private, rshared, rslave, or rprivate(default). See also mount(2).
+	      · ro, readonly: true or false (default).
+
+	      · bind-propagation: shared, slave, private, unbindable, rshared, rslave, runbindable, or rprivate(default). See also mount(2).
 
 	      . bind-nonrecursive: do not setup a recursive bind mount.  By default it is recursive.
 
 	      . relabel: shared, private.
 
        Options specific to tmpfs:
+
+	      · ro, readonly: true or false (default).
 
 	      · tmpfs-size: Size of the tmpfs mount in bytes. Unlimited by default in Linux.
 
@@ -985,7 +1015,7 @@ The _options_ is a comma delimited list and can be: <sup>[[1]](#Footnote1)</sup>
 
 * **rw**|**ro**
 * **z**|**Z**
-* [**r**]**shared**|[**r**]**slave**|[**r**]**private**
+* [**r**]**shared**|[**r**]**slave**|[**r**]**private**[**r**]**unbindable**
 * [**r**]**bind**
 * [**no**]**exec**
 * [**no**]**dev**
@@ -1069,12 +1099,13 @@ way mount propagation and that is mounts done on host under that volume
 will be visible inside container but not the other way around. <sup>[[1]](#Footnote1)</sup>
 
 To control mount propagation property of volume one can use [**r**]**shared**,
-[**r**]**slave** or [**r**]**private** propagation flag. Propagation property can
-be specified only for bind mounted volumes and not for internal volumes or
-named volumes. For mount propagation to work source mount point (mount point
-where source dir is mounted on) has to have right propagation properties. For
-shared volumes, source mount point has to be shared. And for slave volumes,
-source mount has to be either shared or slave. <sup>[[1]](#Footnote1)</sup>
+[**r**]**slave**, [**r**]**private** or [**r**]**unbindable** propagation flag.
+Propagation property can be specified only for bind mounted volumes and not for
+internal volumes or named volumes. For mount propagation to work source mount
+point (mount point where source dir is mounted on) has to have right propagation
+properties. For shared volumes, source mount point has to be shared. And for
+slave volumes, source mount has to be either shared or slave.
+<sup>[[1]](#Footnote1)</sup>
 
 If you want to recursively mount a volume and all of its submounts into a
 container, then you can use the **rbind** option.  By default the bind option is

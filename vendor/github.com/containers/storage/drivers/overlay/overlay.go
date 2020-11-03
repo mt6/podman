@@ -42,6 +42,8 @@ var (
 	untar = chrootarchive.UntarUncompressed
 )
 
+const defaultPerms = os.FileMode(0555)
+
 // This backend uses the overlay union filesystem for containers
 // with diff directories for each layer.
 
@@ -75,7 +77,7 @@ const (
 	maxDepth  = 128
 
 	// idLength represents the number of random characters
-	// which can be used to create the unique link identifer
+	// which can be used to create the unique link identifier
 	// for every layer. If this value is too long then the
 	// page size limit for the mount command may be exceeded.
 	// The idLength should be selected such that following equation
@@ -219,7 +221,7 @@ func Init(home string, options graphdriver.Options) (graphdriver.Driver, error) 
 					return nil, errors.Wrap(err, "error recording metacopy-being-used status")
 				}
 			} else {
-				logrus.Warnf("overlay test mount did not indicate whether or not metacopy is being used: %v", err)
+				logrus.Infof("overlay test mount did not indicate whether or not metacopy is being used: %v", err)
 				return nil, err
 			}
 		}
@@ -280,7 +282,7 @@ func parseOptions(options []string) (*overlayOptions, error) {
 		trimkey = strings.TrimPrefix(trimkey, ".")
 		switch trimkey {
 		case "override_kernel_check":
-			logrus.Warnf("overlay: override_kernel_check option was specified, but is no longer necessary")
+			logrus.Debugf("overlay: override_kernel_check option was specified, but is no longer necessary")
 		case "mountopt":
 			o.mountOptions = val
 		case "size":
@@ -444,14 +446,14 @@ func (d *Driver) useNaiveDiff() bool {
 				logrus.Debugf("cached value indicated that native-diff is usable")
 			} else {
 				logrus.Debugf("cached value indicated that native-diff is not being used")
-				logrus.Warn(nativeDiffCacheText)
+				logrus.Info(nativeDiffCacheText)
 			}
 			useNaiveDiffOnly = !nativeDiffCacheResult
 			return
 		}
 		if err := doesSupportNativeDiff(d.home, d.options.mountOptions); err != nil {
 			nativeDiffCacheText = fmt.Sprintf("Not using native diff for overlay, this may cause degraded performance for building images: %v", err)
-			logrus.Warn(nativeDiffCacheText)
+			logrus.Info(nativeDiffCacheText)
 			useNaiveDiffOnly = true
 		}
 		cachedFeatureRecord(d.runhome, feature, !useNaiveDiffOnly, nativeDiffCacheText)
@@ -571,15 +573,17 @@ func (d *Driver) create(id, parent string, opts *graphdriver.CreateOpts) (retErr
 	if err := idtools.MkdirAllAs(path.Dir(dir), 0700, rootUID, rootGID); err != nil {
 		return err
 	}
+	perms := defaultPerms
 	if parent != "" {
 		st, err := system.Stat(d.dir(parent))
 		if err != nil {
 			return err
 		}
+		perms = os.FileMode(st.Mode())
 		rootUID = int(st.UID())
 		rootGID = int(st.GID())
 	}
-	if err := idtools.MkdirAs(dir, 0700, rootUID, rootGID); err != nil {
+	if err := idtools.MkdirAs(dir, perms, rootUID, rootGID); err != nil {
 		return err
 	}
 
@@ -604,7 +608,7 @@ func (d *Driver) create(id, parent string, opts *graphdriver.CreateOpts) (retErr
 		}
 	}
 
-	if err := idtools.MkdirAs(path.Join(dir, "diff"), 0755, rootUID, rootGID); err != nil {
+	if err := idtools.MkdirAs(path.Join(dir, "diff"), perms, rootUID, rootGID); err != nil {
 		return err
 	}
 
@@ -847,7 +851,11 @@ func (d *Driver) get(id string, disableShifting bool, options graphdriver.MountO
 		return "", err
 	}
 	diffN := 1
-	_, err = os.Stat(filepath.Join(dir, nameWithSuffix("diff", diffN)))
+	perms := defaultPerms
+	st, err := os.Stat(filepath.Join(dir, nameWithSuffix("diff", diffN)))
+	if err == nil {
+		perms = os.FileMode(st.Mode())
+	}
 	for err == nil {
 		absLowers = append(absLowers, filepath.Join(dir, nameWithSuffix("diff", diffN)))
 		relLowers = append(relLowers, dumbJoin(string(link), "..", nameWithSuffix("diff", diffN)))
@@ -908,7 +916,7 @@ func (d *Driver) get(id string, disableShifting bool, options graphdriver.MountO
 		return "", err
 	}
 	diffDir := path.Join(dir, "diff")
-	if err := idtools.MkdirAllAs(diffDir, 0755, rootUID, rootGID); err != nil {
+	if err := idtools.MkdirAllAs(diffDir, perms, rootUID, rootGID); err != nil {
 		return "", err
 	}
 
@@ -1241,11 +1249,16 @@ func (d *Driver) UpdateLayerIDMap(id string, toContainer, toHost *idtools.IDMapp
 
 	// Rotate the diff directories.
 	i := 0
-	_, err = os.Stat(nameWithSuffix(diffDir, i))
+	perms := defaultPerms
+	st, err := os.Stat(nameWithSuffix(diffDir, i))
+	if err == nil {
+		perms = os.FileMode(st.Mode())
+	}
 	for err == nil {
 		i++
 		_, err = os.Stat(nameWithSuffix(diffDir, i))
 	}
+
 	for i > 0 {
 		err = os.Rename(nameWithSuffix(diffDir, i-1), nameWithSuffix(diffDir, i))
 		if err != nil {
@@ -1258,13 +1271,13 @@ func (d *Driver) UpdateLayerIDMap(id string, toContainer, toHost *idtools.IDMapp
 	// to the old upper layer in the index.
 	workDir := filepath.Join(dir, "work")
 	if err := os.RemoveAll(workDir); err == nil {
-		if err := idtools.MkdirAs(workDir, 0755, rootUID, rootGID); err != nil {
+		if err := idtools.MkdirAs(workDir, defaultPerms, rootUID, rootGID); err != nil {
 			return err
 		}
 	}
 
 	// Re-create the directory that we're going to use as the upper layer.
-	if err := idtools.MkdirAs(diffDir, 0755, rootUID, rootGID); err != nil {
+	if err := idtools.MkdirAs(diffDir, perms, rootUID, rootGID); err != nil {
 		return err
 	}
 	return nil

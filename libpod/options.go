@@ -1296,7 +1296,7 @@ func WithRootFS(rootfs string) CtrCreateOption {
 			return define.ErrCtrFinalized
 		}
 		if _, err := os.Stat(rootfs); err != nil {
-			return errors.Wrapf(err, "error checking path %q", rootfs)
+			return err
 		}
 		ctr.config.Rootfs = rootfs
 		return nil
@@ -1432,6 +1432,25 @@ func WithOverlayVolumes(volumes []*ContainerOverlayVolume) CtrCreateOption {
 			ctr.config.OverlayVolumes = append(ctr.config.OverlayVolumes, &ContainerOverlayVolume{
 				Dest:   vol.Dest,
 				Source: vol.Source,
+			})
+		}
+
+		return nil
+	}
+}
+
+// WithImageVolumes adds the given image volumes to the container.
+func WithImageVolumes(volumes []*ContainerImageVolume) CtrCreateOption {
+	return func(ctr *Container) error {
+		if ctr.valid {
+			return define.ErrCtrFinalized
+		}
+
+		for _, vol := range volumes {
+			ctr.config.ImageVolumes = append(ctr.config.ImageVolumes, &ContainerImageVolume{
+				Dest:      vol.Dest,
+				Source:    vol.Source,
+				ReadWrite: vol.ReadWrite,
 			})
 		}
 

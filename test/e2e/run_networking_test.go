@@ -357,7 +357,7 @@ var _ = Describe("Podman run networking", func() {
 	})
 
 	It("podman run network expose ports in image metadata", func() {
-		session := podmanTest.Podman([]string{"create", "--name", "test", "-dt", "-P", nginx})
+		session := podmanTest.Podman([]string{"create", "--name", "test", "-t", "-P", nginx})
 		session.Wait(90)
 		Expect(session.ExitCode()).To(Equal(0))
 		results := podmanTest.Podman([]string{"inspect", "test"})
@@ -593,5 +593,40 @@ var _ = Describe("Podman run networking", func() {
 		run.WaitWithDefaultTimeout()
 		Expect(run.ExitCode()).To(BeZero())
 		Expect(strings.Contains(run.OutputToString(), hostname)).To(BeTrue())
+	})
+
+	It("podman run check dnsname plugin", func() {
+		pod := "testpod"
+		session := podmanTest.Podman([]string{"pod", "create", "--name", pod})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(BeZero())
+
+		net := "dnsNetTest"
+		session = podmanTest.Podman([]string{"network", "create", net})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(BeZero())
+		defer podmanTest.removeCNINetwork(net)
+
+		pod2 := "testpod2"
+		session = podmanTest.Podman([]string{"pod", "create", "--network", net, "--name", pod2})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(BeZero())
+
+		session = podmanTest.Podman([]string{"run", "--name", "con1", "--network", net, ALPINE, "nslookup", "con1"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(BeZero())
+
+		session = podmanTest.Podman([]string{"run", "--name", "con2", "--pod", pod, "--network", net, ALPINE, "nslookup", "con2"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(BeZero())
+
+		session = podmanTest.Podman([]string{"run", "--name", "con3", "--pod", pod2, ALPINE, "nslookup", "con3"})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(Equal(1))
+		Expect(session.ErrorToString()).To(ContainSubstring("can't resolve 'con3'"))
+
+		session = podmanTest.Podman([]string{"run", "--name", "con4", "--network", net, ALPINE, "nslookup", pod2})
+		session.WaitWithDefaultTimeout()
+		Expect(session.ExitCode()).To(BeZero())
 	})
 })

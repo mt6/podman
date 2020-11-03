@@ -382,7 +382,7 @@ var _ = Describe("Podman pod create", func() {
 	})
 
 	It("podman create pod with --infra-image", func() {
-		dockerfile := `FROM docker.io/library/alpine:latest
+		dockerfile := `FROM quay.io/libpod/alpine:latest
 entrypoint ["/fromimage"]
 `
 		podmanTest.BuildImage(dockerfile, "localhost/infra", "false")
@@ -409,7 +409,7 @@ entrypoint ["/fromimage"]
 	})
 
 	It("podman create pod with --infra-command --infra-image", func() {
-		dockerfile := `FROM docker.io/library/alpine:latest
+		dockerfile := `FROM quay.io/libpod/alpine:latest
 entrypoint ["/fromimage"]
 `
 		podmanTest.BuildImage(dockerfile, "localhost/infra", "false")
@@ -445,5 +445,35 @@ entrypoint ["/fromimage"]
 		check.WaitWithDefaultTimeout()
 		Expect(check.ExitCode()).To(Equal(0))
 		Expect(check.OutputToString()).To(Equal("[port_handler=slirp4netns]"))
+	})
+
+	It("podman pod status test", func() {
+		podName := "testpod"
+		create := podmanTest.Podman([]string{"pod", "create", "--name", podName})
+		create.WaitWithDefaultTimeout()
+		Expect(create.ExitCode()).To(Equal(0))
+
+		status1 := podmanTest.Podman([]string{"pod", "inspect", "--format", "{{ .State }}", podName})
+		status1.WaitWithDefaultTimeout()
+		Expect(status1.ExitCode()).To(Equal(0))
+		Expect(strings.Contains(status1.OutputToString(), "Created")).To(BeTrue())
+
+		ctr1 := podmanTest.Podman([]string{"run", "--pod", podName, "-d", ALPINE, "top"})
+		ctr1.WaitWithDefaultTimeout()
+		Expect(ctr1.ExitCode()).To(Equal(0))
+
+		status2 := podmanTest.Podman([]string{"pod", "inspect", "--format", "{{ .State }}", podName})
+		status2.WaitWithDefaultTimeout()
+		Expect(status2.ExitCode()).To(Equal(0))
+		Expect(strings.Contains(status2.OutputToString(), "Running")).To(BeTrue())
+
+		ctr2 := podmanTest.Podman([]string{"create", "--pod", podName, ALPINE, "top"})
+		ctr2.WaitWithDefaultTimeout()
+		Expect(ctr2.ExitCode()).To(Equal(0))
+
+		status3 := podmanTest.Podman([]string{"pod", "inspect", "--format", "{{ .State }}", podName})
+		status3.WaitWithDefaultTimeout()
+		Expect(status3.ExitCode()).To(Equal(0))
+		Expect(strings.Contains(status3.OutputToString(), "Degraded")).To(BeTrue())
 	})
 })

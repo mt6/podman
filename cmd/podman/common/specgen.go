@@ -25,11 +25,8 @@ func getCPULimits(c *ContainerCLIOpts) *specs.LinuxCPU {
 	cpu := &specs.LinuxCPU{}
 	hasLimits := false
 
-	const cpuPeriod = 100000
-
 	if c.CPUS > 0 {
-		quota := int64(c.CPUS * cpuPeriod)
-		period := uint64(cpuPeriod)
+		period, quota := util.CoresToPeriodAndQuota(c.CPUS)
 
 		cpu.Period = &period
 		cpu.Quota = &quota
@@ -533,13 +530,14 @@ func FillOutSpecGen(s *specgen.SpecGenerator, c *ContainerCLIOpts, args []string
 
 	// Only add read-only tmpfs mounts in case that we are read-only and the
 	// read-only tmpfs flag has been set.
-	mounts, volumes, overlayVolumes, err := parseVolumes(c.Volume, c.Mount, c.TmpFS, c.ReadOnlyTmpFS && c.ReadOnly)
+	mounts, volumes, overlayVolumes, imageVolumes, err := parseVolumes(c.Volume, c.Mount, c.TmpFS, c.ReadOnlyTmpFS && c.ReadOnly)
 	if err != nil {
 		return err
 	}
 	s.Mounts = mounts
 	s.Volumes = volumes
 	s.OverlayVolumes = overlayVolumes
+	s.ImageVolumes = imageVolumes
 
 	for _, dev := range c.Devices {
 		s.Devices = append(s.Devices, specs.LinuxDevice{Path: dev})

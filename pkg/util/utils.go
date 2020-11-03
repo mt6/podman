@@ -638,3 +638,41 @@ func ValidateSysctls(strSlice []string) (map[string]string, error) {
 func DefaultContainerConfig() *config.Config {
 	return containerConfig
 }
+
+func CreateCidFile(cidfile string, id string) error {
+	cidFile, err := OpenExclusiveFile(cidfile)
+	if err != nil {
+		if os.IsExist(err) {
+			return errors.Errorf("container id file exists. Ensure another container is not using it or delete %s", cidfile)
+		}
+		return errors.Errorf("error opening cidfile %s", cidfile)
+	}
+	if _, err = cidFile.WriteString(id); err != nil {
+		logrus.Error(err)
+	}
+	cidFile.Close()
+	return nil
+}
+
+// DefaultCPUPeriod is the default CPU period is 100us, which is the same default
+// as Kubernetes.
+const DefaultCPUPeriod uint64 = 100000
+
+// CoresToPeriodAndQuota converts a fraction of cores to the equivalent
+// Completely Fair Scheduler (CFS) parameters period and quota.
+//
+// Cores is a fraction of the CFS period that a container may use. Period and
+// Quota are in microseconds.
+func CoresToPeriodAndQuota(cores float64) (uint64, int64) {
+	return DefaultCPUPeriod, int64(cores * float64(DefaultCPUPeriod))
+}
+
+// PeriodAndQuotaToCores takes the CFS parameters period and quota and returns
+// a fraction that represents the limit to the number of cores that can be
+// utilized over the scheduling period.
+//
+// Cores is a fraction of the CFS period that a container may use. Period and
+// Quota are in microseconds.
+func PeriodAndQuotaToCores(period uint64, quota int64) float64 {
+	return float64(quota) / float64(period)
+}

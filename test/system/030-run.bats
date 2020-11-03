@@ -14,8 +14,8 @@ load helpers
     # ...but check the configured runtime engine, and switch to crun as needed
     run_podman info --format '{{ .Host.OCIRuntime.Path }}'
     if expr "$output" : ".*/crun"; then
-        err_no_such_cmd="Error: executable file.* not found in \$PATH: No such file or directory: OCI runtime command not found error"
-        err_no_exec_dir="Error: open executable: Operation not permitted: OCI runtime permission denied error"
+        err_no_such_cmd="Error: executable file.* not found in \$PATH: No such file or directory: OCI not found"
+        err_no_exec_dir="Error: open executable: Operation not permitted: OCI permission denied"
     fi
 
     tests="
@@ -413,6 +413,17 @@ json-file | f
         else
             is "$output" "" "LogPath (driver=$driver)"
         fi
+
+        if [[ $driver != 'none' ]]; then
+            run_podman logs myctr
+            is "$output" "$msg" "check that podman logs works as expected"
+        else
+            run_podman 125 logs myctr
+            if ! is_remote; then
+                is "$output" ".*this container is using the 'none' log driver, cannot read logs.*" \
+                   "podman logs does not work with none log driver"
+            fi
+        fi
         run_podman rm myctr
     done < <(parse_table "$tests")
 
@@ -462,34 +473,53 @@ json-file | f
 
 # run with --runtime should preserve the named runtime
 @test "podman run : full path to --runtime is preserved" {
-    skip_if_cgroupsv1
-    skip_if_remote
-    run_podman run -d --runtime '/usr/bin/crun' $IMAGE sleep 60
+    skip_if_remote "podman-remote does not support --runtime option"
+
+    # Get configured runtime
+    run_podman info --format '{{.Host.OCIRuntime.Path}}'
+    runtime="$output"
+
+    # Assumes that /var/tmp is not mounted noexec; this is usually safe
+    new_runtime="/var/tmp/myruntime$(random_string 12)"
+    cp --preserve $runtime $new_runtime
+
+    run_podman run -d --runtime "$new_runtime" $IMAGE sleep 60
     cid="$output"
 
     run_podman inspect --format '{{.OCIRuntime}}' $cid
-    is "$output" "/usr/bin/crun"
-
+    is "$output" "$new_runtime" "podman inspect shows configured runtime"
     run_podman kill $cid
+    run_podman rm $cid
+    rm -f $new_runtime
 }
 
 # Regression test for issue #8082
 @test "podman run : look up correct image name" {
-	# Create a 2nd tag for the local image.
-	local name="localhost/foo/bar"
-	run_podman tag $IMAGE $name
+    # Create a 2nd tag for the local image. Force to lower case, and apply it.
+    local newtag="localhost/$(random_string 10)/$(random_string 8)"
+    newtag=${newtag,,}
+    run_podman tag $IMAGE $newtag
 
-	# Create a container with the 2nd tag and make sure that it's being
-	# used.  #8082 always inaccurately used the 1st tag.
-	run_podman create $name
-	cid="$output"
+    # Create a container with the 2nd tag and make sure that it's being
+    # used.  #8082 always inaccurately used the 1st tag.
+    run_podman create $newtag
+    cid="$output"
 
-	run_podman inspect --format "{{.ImageName}}" $cid
-	is "$output" "$name"
+    run_podman inspect --format "{{.ImageName}}" $cid
+    is "$output" "$newtag" "container .ImageName is the container-create name"
 
-	# Clean up.
-	run_podman rm $cid
-	run_podman untag $IMAGE $name
+    # Same thing, but now with a :tag, and making sure it works with --name
+    newtag2="${newtag}:$(random_string 6|tr A-Z a-z)"
+    run_podman tag $IMAGE $newtag2
+
+    cname="$(random_string 14|tr A-Z a-z)"
+    run_podman create --name $cname $newtag2
+    run_podman inspect --format "{{.ImageName}}" $cname
+    is "$output" "$newtag2" "container .ImageName is the container-create name"
+
+    # Clean up.
+    run_podman rm $cid $cname
+    run_podman untag $IMAGE $newtag $newtag2
 }
 
 # vim: filetype=sh

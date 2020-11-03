@@ -14,7 +14,7 @@ import (
 	"github.com/containers/storage/pkg/parsers/kernel"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/onsi/gomega/gexec"
+	. "github.com/onsi/gomega/gexec"
 )
 
 var (
@@ -48,7 +48,7 @@ type PodmanTest struct {
 
 // PodmanSession wraps the gexec.session so we can extend it
 type PodmanSession struct {
-	*gexec.Session
+	*Session
 }
 
 // HostOS is a simple struct for the test os
@@ -96,7 +96,7 @@ func (p *PodmanTest) PodmanAsUserBase(args []string, uid, gid uint32, cwd string
 
 	command.ExtraFiles = extraFiles
 
-	session, err := gexec.Start(command, GinkgoWriter, GinkgoWriter)
+	session, err := Start(command, GinkgoWriter, GinkgoWriter)
 	if err != nil {
 		Fail(fmt.Sprintf("unable to run podman command: %s\n%v", strings.Join(podmanOptions, " "), err))
 	}
@@ -125,7 +125,7 @@ func (p *PodmanTest) NumberOfContainersRunning() int {
 	var containers []string
 	ps := p.PodmanBase([]string{"ps", "-q"}, false, true)
 	ps.WaitWithDefaultTimeout()
-	Expect(ps.ExitCode()).To(Equal(0))
+	Expect(ps).Should(Exit(0))
 	for _, i := range ps.OutputToStringArray() {
 		if i != "" {
 			containers = append(containers, i)
@@ -302,12 +302,7 @@ func (s *PodmanSession) LineInOutputContains(term string) bool {
 // by podman-images(1).
 func (s *PodmanSession) LineInOutputContainsTag(repo, tag string) bool {
 	tagMap := tagOutputToMap(s.OutputToStringArray())
-	for r, t := range tagMap {
-		if repo == r && tag == t {
-			return true
-		}
-	}
-	return false
+	return tagMap[repo][tag]
 }
 
 // IsJSONOutputValid attempts to unmarshal the session buffer
@@ -323,7 +318,7 @@ func (s *PodmanSession) IsJSONOutputValid() bool {
 
 // WaitWithDefaultTimeout waits for process finished with defaultWaitTimeout
 func (s *PodmanSession) WaitWithDefaultTimeout() {
-	Eventually(s, defaultWaitTimeout).Should(gexec.Exit())
+	Eventually(s, defaultWaitTimeout).Should(Exit())
 	os.Stdout.Sync()
 	os.Stderr.Sync()
 	fmt.Println("output:", s.OutputToString())
@@ -337,7 +332,7 @@ func CreateTempDirInTempDir() (string, error) {
 // SystemExec is used to exec a system command to check its exit code or output
 func SystemExec(command string, args []string) *PodmanSession {
 	c := exec.Command(command, args...)
-	session, err := gexec.Start(c, GinkgoWriter, GinkgoWriter)
+	session, err := Start(c, GinkgoWriter, GinkgoWriter)
 	if err != nil {
 		Fail(fmt.Sprintf("unable to run command: %s %s", command, strings.Join(args, " ")))
 	}
@@ -348,7 +343,7 @@ func SystemExec(command string, args []string) *PodmanSession {
 // StartSystemExec is used to start exec a system command
 func StartSystemExec(command string, args []string) *PodmanSession {
 	c := exec.Command(command, args...)
-	session, err := gexec.Start(c, GinkgoWriter, GinkgoWriter)
+	session, err := Start(c, GinkgoWriter, GinkgoWriter)
 	if err != nil {
 		Fail(fmt.Sprintf("unable to run command: %s %s", command, strings.Join(args, " ")))
 	}
@@ -366,10 +361,11 @@ func StringInSlice(s string, sl []string) bool {
 }
 
 // tagOutPutToMap parses each string in imagesOutput and returns
-// a map of repo:tag pairs.  Notice, the first array item will
+// a map whose key is a repo, and value is another map whose keys
+// are the tags found for that repo. Notice, the first array item will
 // be skipped as it's considered to be the header.
-func tagOutputToMap(imagesOutput []string) map[string]string {
-	m := make(map[string]string)
+func tagOutputToMap(imagesOutput []string) map[string]map[string]bool {
+	m := make(map[string]map[string]bool)
 	// iterate over output but skip the header
 	for _, i := range imagesOutput[1:] {
 		tmp := []string{}
@@ -383,7 +379,10 @@ func tagOutputToMap(imagesOutput []string) map[string]string {
 		if len(tmp) < 2 {
 			continue
 		}
-		m[tmp[0]] = tmp[1]
+		if m[tmp[0]] == nil {
+			m[tmp[0]] = map[string]bool{}
+		}
+		m[tmp[0]][tmp[1]] = true
 	}
 	return m
 }

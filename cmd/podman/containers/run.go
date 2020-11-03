@@ -63,6 +63,8 @@ func runFlags(flags *pflag.FlagSet) {
 	flags.BoolVar(&runOpts.SigProxy, "sig-proxy", true, "Proxy received signals to the process")
 	flags.BoolVar(&runRmi, "rmi", false, "Remove container image unless used by other containers")
 	flags.UintVar(&runOpts.PreserveFDs, "preserve-fds", 0, "Pass a number of additional file descriptors into the container")
+	flags.BoolVarP(&runOpts.Detach, "detach", "d", false, "Run container in background and print container ID")
+	flags.StringVar(&runOpts.DetachKeys, "detach-keys", containerConfig.DetachKeys(), "Override the key sequence for detaching a container. Format is a single character `[a-Z]` or a comma separated sequence of `ctrl-<value>`, where `<value>` is one of: `a-cf`, `@`, `^`, `[`, `\\`, `]`, `^` or `_`")
 
 	_ = flags.MarkHidden("signature-policy")
 	if registry.IsRemote() {
@@ -106,18 +108,11 @@ func run(cmd *cobra.Command, args []string) error {
 
 	if af := cliVals.Authfile; len(af) > 0 {
 		if _, err := os.Stat(af); err != nil {
-			return errors.Wrapf(err, "error checking authfile path %s", af)
+			return err
 		}
 	}
-	cidFile, err := openCidFile(cliVals.CIDFile)
-	if err != nil {
-		return err
-	}
 
-	if cidFile != nil {
-		defer errorhandling.CloseQuiet(cidFile)
-		defer errorhandling.SyncQuiet(cidFile)
-	}
+	runOpts.CIDFile = cliVals.CIDFile
 	runOpts.Rm = cliVals.Rm
 	if err := createInit(cmd); err != nil {
 		return err
@@ -171,8 +166,6 @@ func run(cmd *cobra.Command, args []string) error {
 			}
 		}
 	}
-	runOpts.Detach = cliVals.Detach
-	runOpts.DetachKeys = cliVals.DetachKeys
 	cliVals.PreserveFDs = runOpts.PreserveFDs
 	s := specgen.NewSpecGenerator(imageName, cliVals.RootFS)
 	if err := common.FillOutSpecGen(s, &cliVals, args); err != nil {
@@ -193,14 +186,8 @@ func run(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if cidFile != nil {
-		_, err = cidFile.WriteString(report.Id)
-		if err != nil {
-			logrus.Error(err)
-		}
-	}
 
-	if cliVals.Detach {
+	if runOpts.Detach {
 		fmt.Println(report.Id)
 		return nil
 	}

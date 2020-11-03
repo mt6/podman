@@ -4,6 +4,7 @@ package events
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 	"time"
 
@@ -46,6 +47,15 @@ func (e EventJournalD) Write(ee Event) error {
 		if ee.ContainerExitCode != 0 {
 			m["PODMAN_EXIT_CODE"] = strconv.Itoa(ee.ContainerExitCode)
 		}
+		// If we have container labels, we need to convert them to a string so they
+		// can be recorded with the event
+		if len(ee.Details.Attributes) > 0 {
+			b, err := json.Marshal(ee.Details.Attributes)
+			if err != nil {
+				return err
+			}
+			m["PODMAN_LABELS"] = string(b)
+		}
 	case Volume:
 		m["PODMAN_NAME"] = ee.Name
 	}
@@ -59,35 +69,39 @@ func (e EventJournalD) Read(ctx context.Context, options ReadOptions) error {
 	if err != nil {
 		return errors.Wrapf(err, "failed to generate event options")
 	}
-	j, err := sdjournal.NewJournal() //nolint
+	j, err := sdjournal.NewJournal()
 	if err != nil {
 		return err
 	}
-	// TODO AddMatch and Seek seem to conflict
-	// Issue filed upstream -> https://github.com/coreos/go-systemd/issues/315
-	// Leaving commented code in case upstream fixes things
-	//podmanJournal := sdjournal.Match{Field: "SYSLOG_IDENTIFIER", Value: "podman"} //nolint
-	//if err := j.AddMatch(podmanJournal.String()); err != nil {
-	//	return errors.Wrap(err, "failed to add filter for event log")
-	//}
+
+	// match only podman journal entries
+	podmanJournal := sdjournal.Match{Field: "SYSLOG_IDENTIFIER", Value: "podman"}
+	if err := j.AddMatch(podmanJournal.String()); err != nil {
+		return errors.Wrap(err, "failed to add journal filter for event log")
+	}
+
 	if len(options.Since) == 0 && len(options.Until) == 0 && options.Stream {
 		if err := j.SeekTail(); err != nil {
 			return errors.Wrap(err, "failed to seek end of journal")
 		}
-	} else {
-		podmanJournal := sdjournal.Match{Field: "SYSLOG_IDENTIFIER", Value: "podman"} //nolint
-		if err := j.AddMatch(podmanJournal.String()); err != nil {
-			return errors.Wrap(err, "failed to add filter for event log")
+		// After SeekTail calling Next moves to a random entry.
+		// To prevent this we have to call Previous first.
+		// see: https://bugs.freedesktop.org/show_bug.cgi?id=64614
+		if _, err := j.Previous(); err != nil {
+			return errors.Wrap(err, "failed to move journal cursor to previous entry")
 		}
 	}
+
 	// the api requires a next|prev before getting a cursor
 	if _, err := j.Next(); err != nil {
-		return err
+		return errors.Wrap(err, "failed to move journal cursor to next entry")
 	}
+
 	prevCursor, err := j.GetCursor()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to get journal cursor")
 	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -96,30 +110,26 @@ func (e EventJournalD) Read(ctx context.Context, options ReadOptions) error {
 		default:
 			// fallthrough
 		}
+
 		if _, err := j.Next(); err != nil {
-			return err
+			return errors.Wrap(err, "failed to move journal cursor to next entry")
 		}
 		newCursor, err := j.GetCursor()
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to get journal cursor")
 		}
 		if prevCursor == newCursor {
 			if len(options.Until) > 0 || !options.Stream {
 				break
 			}
-			_ = j.Wait(sdjournal.IndefiniteWait) //nolint
+			_ = j.Wait(sdjournal.IndefiniteWait)
 			continue
 		}
 		prevCursor = newCursor
+
 		entry, err := j.GetEntry()
 		if err != nil {
-			return err
-		}
-		// TODO this keeps us from feeding the podman event parser with
-		// with regular journal content; it can be removed if the above
-		// problem with AddMatch is resolved.
-		if entry.Fields["PODMAN_EVENT"] == "" {
-			continue
+			return errors.Wrap(err, "failed to read journal entry")
 		}
 		newEvent, err := newEventFromJournalEntry(entry)
 		if err != nil {
@@ -172,6 +182,19 @@ func newEventFromJournalEntry(entry *sdjournal.JournalEntry) (*Event, error) { /
 				logrus.Errorf("Error parsing event exit code %s", code)
 			} else {
 				newEvent.ContainerExitCode = intCode
+			}
+		}
+
+		// we need to check for the presence of labels recorded to a container event
+		if stringLabels, ok := entry.Fields["PODMAN_LABELS"]; ok && len(stringLabels) > 0 {
+			labels := make(map[string]string, 0)
+			if err := json.Unmarshal([]byte(stringLabels), &labels); err != nil {
+				return nil, err
+			}
+
+			// if we have labels, add them to the event
+			if len(labels) > 0 {
+				newEvent.Details = Details{Attributes: labels}
 			}
 		}
 	case Image:

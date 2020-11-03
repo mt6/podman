@@ -111,17 +111,27 @@ network namespaces can be found.
 
 **--cpu-period**=*limit*
 
-Limit the CPU CFS (Completely Fair Scheduler) period
+Set the CPU period for the Completely Fair Scheduler (CFS), which is a
+duration in microseconds. Once the container's CPU quota is used up, it will
+not be scheduled to run until the current period ends. Defaults to 100000
+microseconds.
 
-Limit the container's CPU usage. This flag tell the kernel to restrict the container's CPU usage to the period you specify.
+On some systems, changing the CPU limits may not be allowed for non-root
+users. For more details, see
+https://github.com/containers/podman/blob/master/troubleshooting.md#26-running-containers-with-cpu-limits-fails-with-a-permissions-error
 
 **--cpu-quota**=*limit*
 
-Limit the CPU CFS (Completely Fair Scheduler) quota
+Limit the CPU Completely Fair Scheduler (CFS) quota.
 
 Limit the container's CPU usage. By default, containers run with the full
-CPU resource. This flag tell the kernel to restrict the container's CPU usage
-to the quota you specify.
+CPU resource. The limit is a number in microseconds. If you provide a number,
+the container will be allowed to use that much CPU time until the CPU period
+ends (controllable via **--cpu-period**).
+
+On some systems, changing the CPU limits may not be allowed for non-root
+users. For more details, see
+https://github.com/containers/podman/blob/master/troubleshooting.md#26-running-containers-with-cpu-limits-fails-with-a-permissions-error
 
 **--cpu-shares**, **-c**=*shares*
 
@@ -374,16 +384,13 @@ not required for Buildah as it supports only Linux.
 
 **--pull**
 
-When the flag is enabled, attempt to pull the latest image from the registries
-listed in registries.conf if a local image does not exist or the image is newer
-than the one in storage. Raise an error if the image is not in any listed
-registry and is not present locally.
+When the option is specified or set to "true", pull the image from the first registry
+it is found in as listed in registries.conf.  Raise an error if not found in the
+registries, even if the image is present locally.
 
-If the flag is disabled (with *--pull=false*), do not pull the image from the
-registry, unless there is no local image. Raise an error if the image is not
-in any registry and is not present locally.
-
-Defaults to *true*.
+If the option is disabled (with *--pull=false*), or not specified, pull the image
+from the registry only if the image is not present locally. Raise an error if the image
+is not found in the registries.
 
 **--pull-always**
 
@@ -787,9 +794,9 @@ registries.conf is the configuration file which specifies which container regist
 
 ## Troubleshooting
 
-If you are using a useradd command within a Containerfile with a large UID/GID, it will create a large sparse file `/var/log/lastlog`.  This can cause the build to hang forever.  Go language does not support sparse files correctly, which can lead to some huge files being created in your container image.
+### lastlog sparse file
 
-### Solution
+If you are using a useradd command within a Containerfile with a large UID/GID, it will create a large sparse file `/var/log/lastlog`.  This can cause the build to hang forever.  Go language does not support sparse files correctly, which can lead to some huge files being created in your container image.
 
 If you are using `useradd` within your build script, you should pass the `--no-log-init or -l` option to the `useradd` command.  This option tells useradd to stop creating the lastlog file.
 

@@ -8,21 +8,20 @@ require (
 	github.com/buger/goterm v0.0.0-20181115115552-c206103e1f37
 	github.com/checkpoint-restore/go-criu v0.0.0-20190109184317-bdb7599cd87b
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
-	github.com/containerd/containerd v1.4.1 // indirect
 	github.com/containernetworking/cni v0.8.0
 	github.com/containernetworking/plugins v0.8.7
-	github.com/containers/buildah v1.16.4
-	github.com/containers/common v0.26.0
+	github.com/containers/buildah v1.17.0
+	github.com/containers/common v0.26.3
 	github.com/containers/conmon v2.0.20+incompatible
-	github.com/containers/image/v5 v5.6.0
+	github.com/containers/image/v5 v5.7.0
 	github.com/containers/psgo v1.5.1
-	github.com/containers/storage v1.23.5
+	github.com/containers/storage v1.23.8
 	github.com/coreos/go-systemd/v22 v22.1.0
 	github.com/cri-o/ocicni v0.2.0
 	github.com/cyphar/filepath-securejoin v0.2.2
 	github.com/davecgh/go-spew v1.1.1
 	github.com/docker/distribution v2.7.1+incompatible
-	github.com/docker/docker v17.12.0-ce-rc1.0.20200917150144-3956a86b6235+incompatible
+	github.com/docker/docker v17.12.0-ce-rc1.0.20201020191947-73dc6a680cdd+incompatible
 	github.com/docker/go-connections v0.4.0
 	github.com/docker/go-units v0.4.0
 	github.com/fsnotify/fsnotify v1.4.9
@@ -36,7 +35,6 @@ require (
 	github.com/hpcloud/tail v1.0.0
 	github.com/json-iterator/go v1.1.10
 	github.com/kr/text v0.2.0 // indirect
-	github.com/moby/sys/mount v0.1.1 // indirect
 	github.com/moby/term v0.0.0-20200915141129-7f0af18e79f2
 	github.com/mrunalp/fileutils v0.0.0-20171103030105-7d4729fb3618
 	github.com/onsi/ginkgo v1.14.2
@@ -52,7 +50,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0
 	github.com/rootless-containers/rootlesskit v0.10.1
 	github.com/sirupsen/logrus v1.7.0
-	github.com/spf13/cobra v1.1.0
+	github.com/spf13/cobra v1.1.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/objx v0.2.0 // indirect
 	github.com/stretchr/testify v1.6.1
@@ -63,10 +61,9 @@ require (
 	github.com/vishvananda/netlink v1.1.0
 	go.etcd.io/bbolt v1.3.5
 	golang.org/x/crypto v0.0.0-20200709230013-948cd5f35899
-	golang.org/x/net v0.0.0-20201006153459-a7d1128ccaa0
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d // indirect
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
-	golang.org/x/sys v0.0.0-20200930185726-fdedc70b468f
+	golang.org/x/sys v0.0.0-20201018230417-eeed37f84f13
 	google.golang.org/appengine v1.6.6 // indirect
 	google.golang.org/protobuf v1.25.0 // indirect
 	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
